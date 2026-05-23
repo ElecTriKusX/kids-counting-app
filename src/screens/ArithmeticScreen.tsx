@@ -1,221 +1,75 @@
 /**
- * ArithmeticScreen — game screen for Arithmetic_Mode.
+ * ArithmeticScreen — режим «Сложение и вычитание».
  *
- * Source of truth: `.kiro/specs/kids-counting-app/design.md`
- *   → "Screen designs / Arithmetic" / "03 Arithmetic — Idle"
- *   → requirements 2.1–2.8, 6.1–6.5, 7.1, 7.2, 12.1–12.6
- *
- * Layout (390×844):
- *  - DoodleBackground: faded math symbols positioned absolutely.
- *  - StatusBar area (height 62).
- *  - Header row (y:78): HomeButton + 10 progress dots.
- *  - Question display (y:240): large arithmetic expression.
- *  - Answer options row (y:520): 3–4 tappable answer chips.
- *
- * Overlays:
- *  - ConfettiOverlay on correct answer.
- *  - RewardOverlay on round complete with passing score (≥5).
- *  - Session failure view on round complete with failing score (<5).
+ * Изменения по запросу:
+ *  - Адаптивные размеры кнопок ответа: при 4 вариантах ужимаем до
+ *    fit_container с min-width, чтобы не выходили за экран.
+ *  - Sound success.mp3 при правильном, error.mp3 при неправильном.
+ *  - Конфетти убраны из feedback'а — теперь YellowBurst вокруг кнопки.
+ *  - Неправильный shake (через ShakeView).
+ *  - Музыка приглушается через useGameMusicVolume.
+ *  - ProgressDots с цветными incorrect-метками.
+ *  - Шрифт Nunito.
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
-  TouchableOpacity,
-  type StyleProp,
-  type ViewStyle,
-  type TextStyle,
 } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
 
-import { useArithmeticGame } from '../features/arithmetic/useArithmeticGame';
+import { DoodleBackground } from '../components/DoodleBackground';
 import HomeButton from '../components/HomeButton';
-import NumericText from '../components/NumericText';
-import ShakeView, { type ShakeHandle } from '../components/ShakeView';
-import ConfettiOverlay from '../components/ConfettiOverlay';
-import RewardOverlay from '../components/RewardOverlay';
 import PressableButton from '../components/PressableButton';
-import ButtonLabel from '../components/ButtonLabel';
-import theme from '@/theme';
-
-// ---------------------------------------------------------------------------
-// Navigation types
-// ---------------------------------------------------------------------------
+import ShakeView, { type ShakeHandle } from '../components/ShakeView';
+import RewardOverlay from '../components/RewardOverlay';
+import { YellowBurst } from '../components/YellowBurst';
+import {
+  ProgressDots,
+  buildDotStates,
+} from '../components/ProgressDots';
+import { useArithmeticGame } from '../features/arithmetic/useArithmeticGame';
+import { useGameMusicVolume } from '../hooks/useGameMusicVolume';
+import { soundAdapter } from '../audio/sound-adapter';
+import { getNunitoFamily } from '../hooks/useAppFonts';
+import SessionFailure from './SessionFailure';
 
 type RootStackParamList = {
   Home: undefined;
   Arithmetic: undefined;
 };
+type NavProp = NativeStackNavigationProp<RootStackParamList, 'Arithmetic'>;
 
-export interface ArithmeticScreenProps {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Arithmetic'>;
-}
+const REFERENCE_WIDTH = 390;
 
-// ---------------------------------------------------------------------------
-// DoodleBackground
-// ---------------------------------------------------------------------------
+const ArithmeticScreen: React.FC = () => {
+  const navigation = useNavigation<NavProp>();
+  const { width } = useWindowDimensions();
+  useGameMusicVolume();
 
-const DOODLE_SYMBOLS: ReadonlyArray<{
-  symbol: string;
-  x: number;
-  y: number;
-  fontSize: number;
-  rotation: string;
-}> = [
-  { symbol: '+', x: 30, y: 140, fontSize: 64, rotation: '-12deg' },
-  { symbol: '−', x: 310, y: 200, fontSize: 80, rotation: '8deg' },
-  { symbol: '3', x: 60, y: 280, fontSize: 72, rotation: '-6deg' },
-  { symbol: '=', x: 280, y: 380, fontSize: 68, rotation: '-15deg' },
-  { symbol: '7', x: 40, y: 480, fontSize: 80, rotation: '10deg' },
-  { symbol: '5', x: 60, y: 680, fontSize: 72, rotation: '14deg' },
-];
-
-const DoodleBackground: React.FC = () => (
-  <>
-    {DOODLE_SYMBOLS.map((item, idx) => (
-      <Text
-        key={idx}
-        style={[
-          styles.doodleSymbol,
-          {
-            left: item.x,
-            top: item.y,
-            fontSize: item.fontSize,
-            transform: [{ rotate: item.rotation }],
-          },
-        ]}
-        accessibilityElementsHidden
-        importantForAccessibility="no"
-      >
-        {item.symbol}
-      </Text>
-    ))}
-  </>
-);
-
-DoodleBackground.displayName = 'DoodleBackground';
-
-// ---------------------------------------------------------------------------
-// ProgressDots
-// ---------------------------------------------------------------------------
-
-interface ProgressDotsProps {
-  questionIndex: number;
-  isRoundComplete: boolean;
-}
-
-const ProgressDots: React.FC<ProgressDotsProps> = ({
-  questionIndex,
-  isRoundComplete,
-}) => {
-  const dots = Array.from({ length: 10 }, (_, i) => {
-    const isDone = isRoundComplete ? true : i < questionIndex;
-    const isCurrent = !isRoundComplete && i === questionIndex;
-    return { isDone, isCurrent };
-  });
-
-  return (
-    <View style={styles.dotsRow}>
-      {dots.map((dot, i) => (
-        <View
-          key={i}
-          style={[
-            styles.dot,
-            dot.isDone && styles.dotDone,
-            dot.isCurrent && styles.dotCurrent,
-            !dot.isDone && !dot.isCurrent && styles.dotPending,
-          ]}
-        />
-      ))}
-    </View>
-  );
-};
-
-ProgressDots.displayName = 'ProgressDots';
-
-// ---------------------------------------------------------------------------
-// AnswerOption
-// ---------------------------------------------------------------------------
-
-interface AnswerOptionProps {
-  value: number;
-  selectedAnswer: number | null;
-  correctAnswer: number;
-  feedbackKind: 'idle' | 'correct' | 'incorrect';
-  onPress: (value: number) => void;
-  shakeRef: React.RefObject<ShakeHandle>;
-}
-
-const AnswerOption: React.FC<AnswerOptionProps> = ({
-  value,
-  selectedAnswer,
-  correctAnswer,
-  feedbackKind,
-  onPress,
-  shakeRef,
-}) => {
-  const isSelected = selectedAnswer === value;
-  const isCorrectAnswer = value === correctAnswer;
-
-  let optionStyle: StyleProp<ViewStyle> = styles.optionDefault;
-  let labelStyle: StyleProp<TextStyle> = styles.optionLabelDefault;
-
-  if (feedbackKind !== 'idle' && isSelected) {
-    if (feedbackKind === 'correct') {
-      optionStyle = styles.optionCorrect;
-      labelStyle = styles.optionLabelLight;
-    } else {
-      optionStyle = styles.optionIncorrect;
-      labelStyle = styles.optionLabelLight;
-    }
-  } else if (feedbackKind !== 'idle' && !isSelected && isCorrectAnswer) {
-    // Highlight the correct answer when the child picked wrong
-    optionStyle = styles.optionCorrect;
-    labelStyle = styles.optionLabelLight;
-  }
-
-  const handlePress = useCallback(() => {
-    onPress(value);
-  }, [onPress, value]);
-
-  return (
-    <ShakeView ref={shakeRef} style={styles.optionWrapper}>
-      <PressableButton
-        onPress={handlePress}
-        disabled={feedbackKind !== 'idle'}
-        style={[styles.optionButton, optionStyle]}
-        accessibilityLabel={`Ответ ${value}`}
-        accessibilityRole="button"
-      >
-        <ButtonLabel style={[styles.optionLabelBase, labelStyle]} fontSize={32}>
-          {value}
-        </ButtonLabel>
-      </PressableButton>
-    </ShakeView>
-  );
-};
-
-AnswerOption.displayName = 'AnswerOption';
-
-// ---------------------------------------------------------------------------
-// ArithmeticScreen
-// ---------------------------------------------------------------------------
-
-const ArithmeticScreen: React.FC<ArithmeticScreenProps> = ({ navigation }) => {
   const {
     question,
     questionIndex,
     isRoundComplete,
     roundScore,
+    history,
     selectedAnswer,
     feedbackKind,
     answer,
     startNewRound,
   } = useArithmeticGame();
 
-  // One shake ref per option slot (max 4 options).
+  const [burstTrigger, setBurstTrigger] = useState(0);
+  const [burstOrigin, setBurstOrigin] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const buttonRefs = useRef<Record<number, View | null>>({});
+
+  // По одному shake-ref на каждый из возможных 4 слотов
   const shakeRefs = [
     useRef<ShakeHandle>(null),
     useRef<ShakeHandle>(null),
@@ -223,33 +77,40 @@ const ArithmeticScreen: React.FC<ArithmeticScreenProps> = ({ navigation }) => {
     useRef<ShakeHandle>(null),
   ] as const;
 
-  // Start the round on mount.
   useEffect(() => {
     startNewRound();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Trigger shake on the selected incorrect option.
+  // Звук + shake при ответе
   useEffect(() => {
-    if (feedbackKind !== 'incorrect' || selectedAnswer === null || question === null) {
-      return;
-    }
-    const idx = question.options.indexOf(selectedAnswer);
-    if (idx >= 0 && idx < shakeRefs.length) {
-      shakeRefs[idx]?.current?.shake();
+    if (feedbackKind === 'idle') return;
+    if (feedbackKind === 'correct') {
+      void soundAdapter.play('success');
+      // Триггерим YellowBurst вокруг выбранной кнопки
+      if (selectedAnswer !== null) {
+        const node = buttonRefs.current[selectedAnswer];
+        if (node) {
+          node.measureInWindow((x, y, w, h) => {
+            setBurstOrigin({ x: x + w / 2, y: y + h / 2 });
+            setBurstTrigger((n) => n + 1);
+          });
+        }
+      }
+    } else if (feedbackKind === 'incorrect') {
+      void soundAdapter.play('error');
+      if (selectedAnswer !== null && question !== null) {
+        const idx = question.options.indexOf(selectedAnswer);
+        if (idx >= 0 && idx < shakeRefs.length) {
+          shakeRefs[idx]?.current?.shake();
+        }
+      }
     }
   }, [feedbackKind, selectedAnswer, question, shakeRefs]);
 
   const handleGoHome = useCallback(() => {
     navigation.goBack();
   }, [navigation]);
-
-  const handleAnswer = useCallback(
-    (value: number) => {
-      answer(value);
-    },
-    [answer],
-  );
 
   const handleRewardComplete = useCallback(() => {
     navigation.goBack();
@@ -259,7 +120,6 @@ const ArithmeticScreen: React.FC<ArithmeticScreenProps> = ({ navigation }) => {
     startNewRound();
   }, [startNewRound]);
 
-  // Build the question string.
   const questionText =
     question !== null
       ? `${question.a} ${question.op === 'add' ? '+' : '−'} ${question.b} = ?`
@@ -267,78 +127,115 @@ const ArithmeticScreen: React.FC<ArithmeticScreenProps> = ({ navigation }) => {
 
   const isPassingRound = roundScore >= 5;
 
+  // Адаптив для кнопок ответа: ужимаем при 4 вариантах
+  const optionCount = question?.options.length ?? 3;
+  const buttonStyle = useMemo(() => {
+    const screenW = Math.max(width, 320);
+    const padding = 21 * 2;
+    const gap = 18 * (optionCount - 1);
+    const available = screenW - padding - gap;
+    const calculated = Math.floor(available / optionCount);
+    // Целевой размер 96, но если не влезает — уменьшаем (минимум 72)
+    const size = Math.max(72, Math.min(96, calculated));
+    return { width: size, height: size, minWidth: size, minHeight: size };
+  }, [width, optionCount]);
+
+  const optionFontSize = buttonStyle.width >= 90 ? 48 : 36;
+
+  const dotStates = buildDotStates(history, questionIndex, isRoundComplete);
+
   return (
-    <View style={styles.container}>
-      {/* Doodle background */}
+    <View style={styles.root}>
       <DoodleBackground />
 
-      {/* StatusBar spacer */}
       <View style={styles.statusBarSpacer} />
 
-      {/* Header row */}
-      <View style={styles.header}>
+      <View style={[styles.header, { width: width - 32 }]}>
         <HomeButton onPress={handleGoHome} />
-        <ProgressDots
-          questionIndex={questionIndex}
-          isRoundComplete={isRoundComplete}
-        />
+        <ProgressDots states={dotStates} />
       </View>
 
-      {/* Question display */}
-      <View style={styles.questionContainer}>
-        <NumericText
-          fontSize={80}
-          style={styles.questionText}
-          accessibilityLabel={questionText}
-        >
+      <View style={[styles.questionContainer, { top: width < 360 ? 200 : 240 }]}>
+        <Text style={[styles.questionText, { fontSize: width < 360 ? 64 : 80 }]}>
           {questionText}
-        </NumericText>
+        </Text>
       </View>
 
-      {/* Answer options */}
       {question !== null && (
-        <View style={styles.optionsRow}>
-          {question.options.map((opt, idx) => (
-            <AnswerOption
-              key={`${question.id}-${opt}-${idx}`}
-              value={opt}
-              selectedAnswer={selectedAnswer}
-              correctAnswer={question.correctAnswer}
-              feedbackKind={feedbackKind}
-              onPress={handleAnswer}
-              shakeRef={shakeRefs[idx] ?? shakeRefs[0]}
-            />
-          ))}
+        <View
+          style={[
+            styles.optionsRow,
+            { top: width < 360 ? 460 : 520, gap: 18 },
+          ]}
+        >
+          {question.options.map((opt, idx) => {
+            const isSelected = selectedAnswer === opt;
+            const isCorrectOption = opt === question.correctAnswer;
+            const showAsCorrect =
+              feedbackKind === 'correct' && isSelected;
+            const showAsIncorrect =
+              feedbackKind === 'incorrect' && isSelected;
+            const showCorrectHint =
+              feedbackKind === 'incorrect' && isCorrectOption;
+
+            return (
+              <ShakeView
+                key={`${question.id}-${idx}`}
+                ref={shakeRefs[idx] ?? shakeRefs[0]}
+              >
+                <View
+                  ref={(r) => {
+                    buttonRefs.current[opt] = r;
+                  }}
+                >
+                  <PressableButton
+                    onPress={() => answer(opt)}
+                    disabled={feedbackKind !== 'idle' || isRoundComplete}
+                    accessibilityLabel={`Ответ ${opt}`}
+                    style={[
+                      styles.optionButton,
+                      buttonStyle,
+                      showAsCorrect && styles.optionCorrect,
+                      showAsIncorrect && styles.optionIncorrect,
+                      showCorrectHint && styles.optionCorrectHint,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.optionLabel,
+                        { fontSize: optionFontSize },
+                        (showAsCorrect || showAsIncorrect) &&
+                          styles.optionLabelLight,
+                      ]}
+                    >
+                      {opt}
+                    </Text>
+                  </PressableButton>
+                </View>
+              </ShakeView>
+            );
+          })}
         </View>
       )}
 
-      {/* Session failure overlay */}
+      {/* YellowBurst вокруг правильно нажатой кнопки */}
+      {burstOrigin !== null && (
+        <YellowBurst
+          trigger={burstTrigger}
+          originX={burstOrigin.x}
+          originY={burstOrigin.y}
+        />
+      )}
+
+      {/* Failure overlay */}
       {isRoundComplete && !isPassingRound && (
-        <View style={styles.failureOverlay}>
-          <View style={styles.failureCard}>
-            <Text style={styles.failureEmoji}>🙈</Text>
-            <Text style={styles.failureTitle}>Не страшно!</Text>
-            <Text style={styles.failureSubtitle}>
-              Попробуй ещё раз — у тебя получится!
-            </Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={handleRetry}
-              accessibilityLabel="Попробовать снова"
-              accessibilityRole="button"
-            >
-              <Text style={styles.retryButtonLabel}>Ещё раз</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <SessionFailure score={roundScore} onRetry={handleRetry} onHome={handleGoHome} />
       )}
 
-      {/* Confetti overlay — correct answer feedback */}
-      <ConfettiOverlay visible={feedbackKind === 'correct'} />
-
-      {/* Reward overlay — round complete with passing score */}
+      {/* Reward overlay при успешном раунде */}
       <RewardOverlay
         visible={isRoundComplete && isPassingRound}
+        onAnotherRound={handleRetry}
         onComplete={handleRewardComplete}
       />
     </View>
@@ -347,186 +244,79 @@ const ArithmeticScreen: React.FC<ArithmeticScreenProps> = ({ navigation }) => {
 
 ArithmeticScreen.displayName = 'ArithmeticScreen';
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+export { ArithmeticScreen };
+export default ArithmeticScreen;
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#FFF8F0',
   },
 
-  // Doodle background
-  doodleSymbol: {
-    position: 'absolute',
-    opacity: 0.07,
-    color: theme.colors.text,
-    fontWeight: '800',
-  },
+  statusBarSpacer: { height: 62 },
 
-  // StatusBar spacer
-  statusBarSpacer: {
-    height: 62,
-  },
-
-  // Header
   header: {
     position: 'absolute',
     top: 78,
     left: 16,
-    width: 358,
     height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
 
-  // Progress dots
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dot: {
-    borderRadius: 999,
-  },
-  dotDone: {
-    width: 12,
-    height: 12,
-    backgroundColor: theme.colors.success,
-  },
-  dotCurrent: {
-    width: 16,
-    height: 16,
-    backgroundColor: theme.colors.primary,
-  },
-  dotPending: {
-    width: 12,
-    height: 12,
-    backgroundColor: 'rgba(26,26,46,0.08)',
-  },
-
-  // Question
   questionContainer: {
     position: 'absolute',
-    top: 240,
     left: 0,
     right: 0,
+    height: 160,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 16,
   },
   questionText: {
-    fontSize: 80,
-    fontWeight: '800',
-    color: theme.colors.text,
+    fontFamily: getNunitoFamily('800'),
+    color: '#1A1A2E',
     textAlign: 'center',
   },
 
-  // Answer options
   optionsRow: {
     position: 'absolute',
-    top: 520,
     left: 21,
-    width: 348,
-    height: 96,
+    right: 21,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 18,
-  },
-  optionWrapper: {
-    // ShakeView wraps the button; size is set on the button itself.
   },
   optionButton: {
-    width: 96,
-    height: 96,
     borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionDefault: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#FFFDF9',
     borderWidth: 3,
     borderColor: 'rgba(26,26,46,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1A1A2E',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
   optionCorrect: {
-    backgroundColor: theme.colors.success,
-    borderWidth: 3,
-    borderColor: theme.colors.success,
+    backgroundColor: '#6BCB77',
+    borderColor: '#6BCB77',
   },
   optionIncorrect: {
-    backgroundColor: theme.colors.danger,
-    borderWidth: 3,
-    borderColor: theme.colors.danger,
+    backgroundColor: '#FF6B6B',
+    borderColor: '#FF6B6B',
   },
-  optionLabelBase: {
-    textAlign: 'center',
+  optionCorrectHint: {
+    borderColor: '#6BCB77',
   },
-  optionLabelDefault: {
-    color: theme.colors.text,
+  optionLabel: {
+    fontFamily: getNunitoFamily('800'),
+    color: '#1A1A2E',
   },
   optionLabelLight: {
     color: '#FFFFFF',
   },
-
-  // Session failure overlay
-  failureOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(26,26,46,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  failureCard: {
-    width: 320,
-    backgroundColor: theme.colors.surface,
-    borderRadius: 32,
-    padding: 32,
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: theme.colors.text,
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  failureEmoji: {
-    fontSize: 64,
-    lineHeight: 72,
-  },
-  failureTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  failureSubtitle: {
-    fontSize: 18,
-    fontWeight: '400',
-    color: theme.colors.text,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-  retryButton: {
-    marginTop: 8,
-    backgroundColor: theme.colors.primary,
-    borderRadius: 24,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    minHeight: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  retryButtonLabel: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
 });
-
-export { ArithmeticScreen };
-export default ArithmeticScreen;

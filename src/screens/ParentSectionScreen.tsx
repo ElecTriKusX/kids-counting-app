@@ -8,9 +8,8 @@
  * Scrollable — taller than 844px to accommodate three mode cards.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Alert,
   Image,
   ScrollView,
   StatusBar,
@@ -22,11 +21,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Trash2 } from 'lucide-react-native';
 
 import theme from '@/theme';
 import HomeButton from '@/components/HomeButton';
 import PressableButton from '@/components/PressableButton';
+import { BackgroundGradient } from '@/components/BackgroundGradient';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useProgressStore, effectiveLevel } from '@/state/progress-store';
+import { getNunitoFamily } from '@/hooks/useAppFonts';
 import type { DifficultyLevel, GameMode } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -170,24 +173,20 @@ const ModeCard: React.FC<ModeCardProps> = ({ mode }) => {
 const ParentSectionScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const resetAll = useProgressStore((s) => s.resetAll);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleReset = (): void => {
-    Alert.alert(
-      'Сбросить прогресс?',
-      'Все наклейки, статистика и уровни сложности будут удалены. Это действие нельзя отменить.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Сбросить',
-          style: 'destructive',
-          onPress: () => resetAll(),
-        },
-      ],
-    );
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmReset = (): void => {
+    setConfirmOpen(false);
+    resetAll();
   };
 
   return (
     <View style={styles.root}>
+      <BackgroundGradient />
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -213,12 +212,21 @@ const ParentSectionScreen: React.FC = () => {
             accessibilityRole="button"
             style={styles.resetButton}
           >
-            {/* Trash glyph — Unicode wastebasket (U+1F5D1) */}
-            <Text style={styles.resetIcon}>🗑</Text>
+            <Trash2 size={20} color="#FF6B6B" strokeWidth={2.5} />
             <Text style={styles.resetLabel}>Сбросить прогресс</Text>
           </PressableButton>
         </ScrollView>
       </SafeAreaView>
+
+      <ConfirmDialog
+        visible={confirmOpen}
+        title="Сбросить прогресс?"
+        message="Все наклейки и статистика будут удалены."
+        confirmLabel="Сбросить"
+        cancelLabel="Отмена"
+        onConfirm={handleConfirmReset}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </View>
   );
 };
@@ -375,11 +383,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-  },
-
-  resetIcon: {
-    fontSize: 20,
-    lineHeight: 24,
   },
 
   resetLabel: {

@@ -24,6 +24,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import theme from '@/theme';
 import HomeButton from '@/components/HomeButton';
 import PressableButton from '@/components/PressableButton';
+import { BackgroundGradient } from '@/components/BackgroundGradient';
 import { useParentLock } from '@/features/parent/useParentLock';
 
 // ---------------------------------------------------------------------------
@@ -77,6 +78,7 @@ const ParentLockScreen: React.FC = () => {
 
   return (
     <View style={styles.root}>
+      <BackgroundGradient />
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>

@@ -149,6 +149,9 @@ function initialState(): SessionState {
   };
 }
 
+/** Максимум плиток в Compose bin (нужно собрать ровно из двух цифр). */
+const MAX_TILES_IN_BIN = 2;
+
 /**
  * The session store hook.
  *
@@ -184,10 +187,20 @@ export const useSessionStore = create<SessionStore>((set) => ({
         // can never desynchronize from the puzzle that owns it.
         return state;
       }
+      // Защита от переполнения: в bin может быть максимум 2 плитки
+      // (по дизайну собираем число из ровно двух слагаемых).
+      // Если уже есть 2 — новый тайл просто игнорируем; ребёнок
+      // должен сначала очистить bin (или дождаться invalid).
+      if (state.composeBin.tiles.length >= MAX_TILES_IN_BIN) {
+        return state;
+      }
+      // Защита от двойного добавления одной и той же плитки
+      // (например, при быстром повторном тапе).
+      if (state.composeBin.tiles.some((t) => t.id === tile.id)) {
+        return state;
+      }
       const tiles = [...state.composeBin.tiles, tile];
       const sum = tiles.reduce((acc, t) => acc + t.value, 0);
-      // `classifyBin` only reads `tiles` and `sum`, so we can pass
-      // a freshly-built bin with a placeholder status.
       const status = classifyBin({ tiles, sum, status: 'partial' }, target);
       return { composeBin: { tiles, sum, status } };
     });

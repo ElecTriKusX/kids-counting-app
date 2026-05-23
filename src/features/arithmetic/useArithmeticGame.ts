@@ -70,6 +70,8 @@ export interface UseArithmeticGameResult {
   isRoundComplete: boolean;
   /** Number of correct answers in the current round (0..10). */
   roundScore: number;
+  /** История outcomes по индексу вопроса для ProgressDots. */
+  history: ReadonlyArray<'correct' | 'incorrect'>;
   /** Last numeric answer the child tapped, cleared between questions. */
   selectedAnswer: number | null;
   /** Drives Answer_Feedback overlays in the screen. */
@@ -90,6 +92,9 @@ export function useArithmeticGame(): UseArithmeticGameResult {
   >('idle');
   const [isRoundComplete, setIsRoundComplete] = useState(false);
   const [roundScore, setRoundScore] = useState(0);
+  const [history, setHistory] = useState<ReadonlyArray<'correct' | 'incorrect'>>(
+    [],
+  );
 
   // Refs hold round-scoped state that does NOT need to trigger a
   // re-render on its own.
@@ -138,6 +143,7 @@ export function useArithmeticGame(): UseArithmeticGameResult {
     useSessionStore.getState().startRound('arithmetic');
     correctCountRef.current = 0;
     setRoundScore(0);
+    setHistory([]);
     setSelectedAnswer(null);
     setFeedbackKind('idle');
     setIsRoundComplete(false);
@@ -162,6 +168,9 @@ export function useArithmeticGame(): UseArithmeticGameResult {
 
       // Drive Difficulty_Engine + lifetime stats.
       useProgressStore.getState().recordAnswer('arithmetic', outcome);
+
+      // История для ProgressDots
+      setHistory((h) => [...h, outcome]);
 
       if (isCorrect) {
         correctCountRef.current += 1;
@@ -215,6 +224,7 @@ export function useArithmeticGame(): UseArithmeticGameResult {
     questionIndex,
     isRoundComplete,
     roundScore,
+    history,
     selectedAnswer,
     feedbackKind,
     answer,

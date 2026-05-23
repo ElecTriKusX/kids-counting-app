@@ -77,6 +77,8 @@ export interface UseCompareGameResult {
   questionIndex: number;
   /** `true` after the 10th answer's feedback delay completes. */
   isRoundComplete: boolean;
+  /** История outcomes для ProgressDots. */
+  history: ReadonlyArray<'correct' | 'incorrect'>;
   /** Last label the child tapped, cleared between questions. */
   selectedAnswer: CompareLabel | null;
   /** Drives Answer_Feedback overlays in the screen. */
@@ -104,6 +106,9 @@ export function useCompareGame(): UseCompareGameResult {
     'idle' | 'correct' | 'incorrect'
   >('idle');
   const [isRoundComplete, setIsRoundComplete] = useState(false);
+  const [history, setHistory] = useState<ReadonlyArray<'correct' | 'incorrect'>>(
+    [],
+  );
 
   // Refs hold round-scoped state that does NOT need to trigger a
   // re-render on its own. Generators read them on demand, and the
@@ -157,6 +162,7 @@ export function useCompareGame(): UseCompareGameResult {
     useSessionStore.getState().startRound('compare');
     recentLabelsRef.current = [];
     correctCountRef.current = 0;
+    setHistory([]);
     setSelectedAnswer(null);
     setFeedbackKind('idle');
     setIsRoundComplete(false);
@@ -187,6 +193,9 @@ export function useCompareGame(): UseCompareGameResult {
 
       // Drive Difficulty_Engine + lifetime stats.
       useProgressStore.getState().recordAnswer('compare', outcome);
+
+      // История для ProgressDots
+      setHistory((h) => [...h, outcome]);
 
       // Always feed the *correct* label into the balancing window —
       // generator distribution must not depend on whether the child
@@ -246,6 +255,7 @@ export function useCompareGame(): UseCompareGameResult {
     question,
     questionIndex,
     isRoundComplete,
+    history,
     selectedAnswer,
     feedbackKind,
     answer,

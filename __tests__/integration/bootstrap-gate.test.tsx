@@ -12,13 +12,44 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 jest.mock('expo-av', () => ({
   Audio: {
     setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
-    Sound: { createAsync: jest.fn().mockResolvedValue({ sound: { replayAsync: jest.fn(), unloadAsync: jest.fn() } }) },
+    Sound: {
+      createAsync: jest.fn().mockResolvedValue({
+        sound: {
+          replayAsync: jest.fn(),
+          unloadAsync: jest.fn(),
+          stopAsync: jest.fn(),
+          setVolumeAsync: jest.fn(),
+          getStatusAsync: jest.fn().mockResolvedValue({}),
+        },
+      }),
+    },
   },
 }));
 
 // Mock the sound adapter so preload() resolves immediately
 jest.mock('../../src/audio/sound-adapter', () => ({
-  soundAdapter: { preload: jest.fn().mockResolvedValue(undefined) },
+  soundAdapter: {
+    preload: jest.fn().mockResolvedValue(undefined),
+    play: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+// Mock background music
+jest.mock('../../src/audio/background-music', () => ({
+  backgroundMusic: {
+    start: jest.fn().mockResolvedValue(undefined),
+    stop: jest.fn().mockResolvedValue(undefined),
+    setVolume: jest.fn().mockResolvedValue(undefined),
+  },
+  BG_VOLUME_NORMAL: 0.6,
+  BG_VOLUME_QUIET: 0.25,
+  BG_VOLUME_MUTE: 0,
+}));
+
+// Mock fonts hook so it returns true immediately (тесту не нужно ждать загрузки)
+jest.mock('../../src/hooks/useAppFonts', () => ({
+  useAppFonts: () => true,
+  getNunitoFamily: () => 'System',
 }));
 
 // Mock AppState
@@ -26,32 +57,47 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
 
+// Override SplashScreen to use our stub
+jest.mock('../../src/app/SplashScreen', () => {
+  const RN = require('react-native');
+  const ReactLib = require('react');
+  return () =>
+    ReactLib.createElement(RN.Text, { testID: 'splash-screen' }, 'Splash');
+});
+
 import BootstrapGate from '../../src/app/BootstrapGate';
 
 const HomeStub = () => <Text testID="home-screen">Home</Text>;
 
-// Override SplashScreen to use our stub
-jest.mock('../../src/app/SplashScreen', () => {
-  const { Text } = require('react-native');
-  return () => <Text testID="splash-screen">Splash</Text>;
-});
-
 describe('Smoke test 14.1: BootstrapGate hydrates store before rendering Home', () => {
+  // Splash минимально 5 секунд — нужен длинный fake timers + flush
+  beforeAll(() => {
+    jest.useFakeTimers();
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   it('shows splash initially, then renders children after hydration', async () => {
     const { getByTestId, queryByTestId } = render(
       <BootstrapGate>
         <HomeStub />
-      </BootstrapGate>
+      </BootstrapGate>,
     );
 
-    // Initially shows splash (hydrated=false)
+    // Initially shows splash
     expect(getByTestId('splash-screen')).toBeTruthy();
     expect(queryByTestId('home-screen')).toBeNull();
 
-    // After hydration, shows children
-    await waitFor(() => {
-      expect(queryByTestId('splash-screen')).toBeNull();
-      expect(getByTestId('home-screen')).toBeTruthy();
-    }, { timeout: 3000 });
+    // Прокручиваем 6 секунд (минимум 5)
+    jest.advanceTimersByTime(6000);
+
+    await waitFor(
+      () => {
+        expect(queryByTestId('splash-screen')).toBeNull();
+        expect(getByTestId('home-screen')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
   });
 });

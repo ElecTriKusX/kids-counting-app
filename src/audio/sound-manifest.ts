@@ -15,7 +15,8 @@ export type SoundId =
   | 'error'
   | 'session_reward'
   | 'drag_pickup'
-  | 'drag_drop';
+  | 'drag_drop'
+  | 'background';
 
 export interface SoundManifestEntry {
   id: SoundId;
@@ -69,5 +70,12 @@ export const SOUND_MANIFEST: Record<SoundId, SoundManifestEntry> = {
     prompt:
       'Мягкий «клик» или приземление при опускании плитки в корзину, до 200мс',
     maxDurationMs: 200,
+  },
+  background: {
+    id: 'background',
+    module: require('../../assets/audio/background.mp3'),
+    prompt:
+      'Спокойная фоновая мелодия для детей дошкольного возраста, на repeat. Громкость во время игры приглушается. Тёплый, мягкий, не отвлекающий от заданий.',
+    maxDurationMs: 0,
   },
 };

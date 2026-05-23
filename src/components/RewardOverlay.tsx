@@ -18,7 +18,7 @@
  *  - Длительность ~1000ms, easing spring.
  */
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -68,6 +68,14 @@ const RewardOverlay: React.FC<RewardOverlayProps> = ({
   const circleScale = useSharedValue(0);
   const starScale = useSharedValue(0);
 
+  // onComplete храним в ref, чтобы re-render'ы (idle-signal, store) не
+  // сбрасывали таймер автозакрытия каждый раз, когда коллбэк
+  // пересоздаётся в родителе.
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
   useEffect(() => {
     if (!visible) {
       haloOpacity.value = 0;
@@ -100,10 +108,14 @@ const RewardOverlay: React.FC<RewardOverlayProps> = ({
     );
 
     const handle = setTimeout(() => {
-      onComplete?.();
+      onCompleteRef.current?.();
     }, ANIMATION_TOTAL_MS);
     return () => clearTimeout(handle);
-  }, [visible, haloOpacity, haloScale, circleScale, starScale, onComplete]);
+    // ВАЖНО: зависимость только от `visible`. Если положить сюда
+    // `onComplete`, любой ре-рендер с новой ссылкой на коллбэк
+    // отменит таймер и автозакрытие никогда не сработает.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const haloStyle = useAnimatedStyle(() => ({
     opacity: haloOpacity.value,

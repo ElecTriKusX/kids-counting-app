@@ -187,11 +187,6 @@ const ComposeScreen: React.FC = () => {
 
   const dotStates = buildDotStates(history, questionIndex, isRoundComplete);
 
-  // Координаты центра Bin для YellowBurst при correct
-  const burstOrigin = binLayout
-    ? { x: binLayout.x + binLayout.w / 2, y: binLayout.y + binLayout.h / 2 }
-    : null;
-
   return (
     <GestureHandlerRootView style={styles.root}>
       <DoodleBackground />
@@ -220,6 +215,11 @@ const ComposeScreen: React.FC = () => {
           target={question?.target ?? 0}
           onLayoutMeasured={handleLayoutMeasured}
         />
+        {/* YellowBurst внутри bin при правильном ответе. Абсолютное
+            позиционирование без measureInWindow — больше нет NaN. */}
+        <View style={styles.burstAnchor} pointerEvents="none">
+          <YellowBurst trigger={burstTrigger} />
+        </View>
       </View>
 
       <View style={[styles.tilesGrid, { width: width - 42 }]}>
@@ -249,14 +249,7 @@ const ComposeScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* YellowBurst вокруг bin при правильном ответе */}
-      {burstOrigin && (
-        <YellowBurst
-          trigger={burstTrigger}
-          originX={burstOrigin.x}
-          originY={burstOrigin.y}
-        />
-      )}
+      {/* YellowBurst теперь рендерится внутри bin (см. binContainer) */}
 
       <RewardOverlay
         visible={isRoundComplete && isPassingRound}
@@ -339,6 +332,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+  },
+  burstAnchor: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   tilesGrid: {

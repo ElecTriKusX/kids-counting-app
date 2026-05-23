@@ -70,14 +70,8 @@ import BootstrapGate from '../../src/app/BootstrapGate';
 const HomeStub = () => <Text testID="home-screen">Home</Text>;
 
 describe('Smoke test 14.1: BootstrapGate hydrates store before rendering Home', () => {
-  // Splash минимально 5 секунд — нужен длинный fake timers + flush
-  beforeAll(() => {
-    jest.useFakeTimers();
-  });
-  afterAll(() => {
-    jest.useRealTimers();
-  });
-
+  // Splash минимально 5 секунд — используем real timers с короткими await,
+  // чтобы Promise.all с асинхронными моками разрешился корректно.
   it('shows splash initially, then renders children after hydration', async () => {
     const { getByTestId, queryByTestId } = render(
       <BootstrapGate>
@@ -89,15 +83,13 @@ describe('Smoke test 14.1: BootstrapGate hydrates store before rendering Home', 
     expect(getByTestId('splash-screen')).toBeTruthy();
     expect(queryByTestId('home-screen')).toBeNull();
 
-    // Прокручиваем 6 секунд (минимум 5)
-    jest.advanceTimersByTime(6000);
-
+    // Ждём 5+ секунд реального времени (мин. длительность splash)
     await waitFor(
       () => {
         expect(queryByTestId('splash-screen')).toBeNull();
         expect(getByTestId('home-screen')).toBeTruthy();
       },
-      { timeout: 3000 },
+      { timeout: 8000 },
     );
-  });
+  }, 12000);
 });

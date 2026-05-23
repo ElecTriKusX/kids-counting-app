@@ -127,14 +127,18 @@ const styles = StyleSheet.create({
     gap: 12,
     width: '100%',
     height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   button: {
     flex: 1,
+    maxWidth: 130,
     height: 60,
     minHeight: 60,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 16,
   },
   cancelButton: {
     backgroundColor: '#FFFDF9',

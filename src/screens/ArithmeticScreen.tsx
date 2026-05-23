@@ -64,10 +64,8 @@ const ArithmeticScreen: React.FC = () => {
   } = useArithmeticGame();
 
   const [burstTrigger, setBurstTrigger] = useState(0);
-  const [burstOrigin, setBurstOrigin] = useState<{ x: number; y: number } | null>(
-    null,
-  );
-  const buttonRefs = useRef<Record<number, View | null>>({});
+  /** Индекс кнопки, в которой проигрывается burst (внутри неё). */
+  const [burstButtonIdx, setBurstButtonIdx] = useState<number | null>(null);
 
   // По одному shake-ref на каждый из возможных 4 слотов
   const shakeRefs = [
@@ -82,19 +80,25 @@ const ArithmeticScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Сбрасываем burst при размонтировании, чтобы анимация не дёргалась
+  // во время transition между экранами (ловит ошибки RN с NaN-координатами).
+  useEffect(() => {
+    return () => {
+      setBurstButtonIdx(null);
+    };
+  }, []);
+
   // Звук + shake при ответе
   useEffect(() => {
     if (feedbackKind === 'idle') return;
     if (feedbackKind === 'correct') {
       void soundAdapter.play('success');
-      // Триггерим YellowBurst вокруг выбранной кнопки
-      if (selectedAnswer !== null) {
-        const node = buttonRefs.current[selectedAnswer];
-        if (node) {
-          node.measureInWindow((x, y, w, h) => {
-            setBurstOrigin({ x: x + w / 2, y: y + h / 2 });
-            setBurstTrigger((n) => n + 1);
-          });
+      // Триггерим YellowBurst внутри выбранной кнопки
+      if (selectedAnswer !== null && question !== null) {
+        const idx = question.options.indexOf(selectedAnswer);
+        if (idx >= 0) {
+          setBurstButtonIdx(idx);
+          setBurstTrigger((n) => n + 1);
         }
       }
     } else if (feedbackKind === 'incorrect') {
@@ -183,11 +187,7 @@ const ArithmeticScreen: React.FC = () => {
                 key={`${question.id}-${idx}`}
                 ref={shakeRefs[idx] ?? shakeRefs[0]}
               >
-                <View
-                  ref={(r) => {
-                    buttonRefs.current[opt] = r;
-                  }}
-                >
+                <View>
                   <PressableButton
                     onPress={() => answer(opt)}
                     disabled={feedbackKind !== 'idle' || isRoundComplete}
@@ -210,21 +210,15 @@ const ArithmeticScreen: React.FC = () => {
                     >
                       {opt}
                     </Text>
+                    {burstButtonIdx === idx && (
+                      <YellowBurst trigger={burstTrigger} />
+                    )}
                   </PressableButton>
                 </View>
               </ShakeView>
             );
           })}
         </View>
-      )}
-
-      {/* YellowBurst вокруг правильно нажатой кнопки */}
-      {burstOrigin !== null && (
-        <YellowBurst
-          trigger={burstTrigger}
-          originX={burstOrigin.x}
-          originY={burstOrigin.y}
-        />
       )}
 
       {/* Failure overlay */}

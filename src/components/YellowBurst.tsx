@@ -2,16 +2,24 @@
  * YellowBurst — небольшой «взрыв» жёлтых шариков вокруг точки.
  *
  * Используется для Answer_Feedback при правильном ответе:
- *  - В Arithmetic/Compare — вокруг выбранной кнопки.
- *  - В Compose — вокруг корзины.
+ *  - В Arithmetic/Compare — оверлей внутри кнопки (originX/Y не передаём).
+ *  - В Compose — оверлей внутри bin.
  *
  * Полноэкранное конфетти — только в Session_Reward (через Lottie).
  *
- * Цвета: yellow-1 / yellow-2 / yellow-3 (как просил пользователь).
+ * Цвета: yellow-1 / yellow-2 / yellow-3.
  *
  * Анимация:
  *  - 10–14 круглых шариков, разлетаются по радиальным траекториям
  *    из точки origin, длительность ~1000ms, fade-out к концу.
+ *
+ * Защита от NaN:
+ *  - Если переданы originX/originY и они валидны — используем абсолютное
+ *    позиционирование. Если не переданы — занимаем всё пространство
+ *    родителя (StyleSheet.absoluteFillObject) и центрируем шарики
+ *    через alignItems/justifyContent. Это предпочтительный путь —
+ *    избавляет от хрупкого measureInWindow и проблем с NaN при
+ *    переходе между экранами.
  */
 
 import React, { useEffect, useMemo } from 'react';
@@ -44,7 +52,7 @@ interface Particle {
 export interface YellowBurstProps {
   /** Когда меняется (новое значение != prev) — запускается новый burst. */
   trigger: number;
-  /** Координаты центра burst'а в системе родителя (по умолчанию — центр родителя). */
+  /** Координаты центра burst'а. Если не заданы — burst центрируется в родителе. */
   originX?: number;
   originY?: number;
   /** Опциональная callback после завершения. */
@@ -95,6 +103,11 @@ const ParticleView: React.FC<ParticleViewProps> = ({ particle }) => {
 
 ParticleView.displayName = 'ParticleView';
 
+/** Безопасная проверка координат — отсекает NaN/undefined/Infinity. */
+function isFiniteNumber(n: number | undefined): n is number {
+  return typeof n === 'number' && Number.isFinite(n);
+}
+
 const YellowBurst: React.FC<YellowBurstProps> = ({
   trigger,
   originX,
@@ -126,15 +139,18 @@ const YellowBurst: React.FC<YellowBurstProps> = ({
 
   if (particles.length === 0) return null;
 
+  // Если переданы валидные координаты — абсолютное позиционирование.
+  // Иначе fallback: заполняем родителя и центрируем (надёжнее).
+  const hasValidOrigin = isFiniteNumber(originX) && isFiniteNumber(originY);
+
   return (
     <View
       pointerEvents="none"
-      style={[
-        styles.container,
-        originX !== undefined && originY !== undefined
-          ? { left: originX, top: originY }
-          : null,
-      ]}
+      style={
+        hasValidOrigin
+          ? [styles.absoluteAnchor, { left: originX, top: originY }]
+          : styles.fillCenter
+      }
     >
       {particles.map((p, i) => (
         <ParticleView key={`${trigger}-${i}`} particle={p} />
@@ -146,10 +162,15 @@ const YellowBurst: React.FC<YellowBurstProps> = ({
 YellowBurst.displayName = 'YellowBurst';
 
 const styles = StyleSheet.create({
-  container: {
+  absoluteAnchor: {
     position: 'absolute',
     width: 0,
     height: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fillCenter: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },

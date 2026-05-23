@@ -124,8 +124,11 @@ export function useTileGesture(
       if (dropped) {
         runOnJS(playDropSound)();
         runOnJS(handleDrop)(tile);
-        translateX.value = 0;
-        translateY.value = 0;
+        // Плавный возврат к нулевой позиции (плитка скрывается через
+        // droppedIds на JS-стороне, поэтому даже при невидимом
+        // элементе spring завершится корректно).
+        translateX.value = withSpring(0, { damping: 18, stiffness: 220 });
+        translateY.value = withSpring(0, { damping: 18, stiffness: 220 });
       } else {
         translateX.value = withSpring(0, { damping: 15, stiffness: 180 });
         translateY.value = withSpring(0, { damping: 15, stiffness: 180 });

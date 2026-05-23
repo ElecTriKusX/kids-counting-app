@@ -1,13 +1,17 @@
 /**
  * Tile — плитка с цифрой (Compose_Mode).
  *
- * Изменения:
- *  - При drag (через external translateX/Y/scale) можно добавить
- *    лёгкое покачивание (rotation oscillation), пока scale > 1.
- *  - Тени и базовая стилизация совпадают с Pencil-компонентом PKWYZ.
+ * Поведение:
+ *  - При drag (через external translateX/Y/scale) поднимается и
+ *    плавно покачивается (rotation ±3deg, period ~280ms), пока
+ *    `wobble` > 0. Покачивание реализовано через `withRepeat` на
+ *    отдельном shared-value (rotation), который запускается/гасится
+ *    через `useAnimatedReaction(wobble, ...)` — без `Date.now()`,
+ *    что безопасно для worklet-рантайма.
+ *  - В покое — без вращения.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   type StyleProp,
   StyleSheet,
@@ -17,10 +21,12 @@ import {
 import Animated, {
   type SharedValue,
   Easing,
+  cancelAnimation,
+  useAnimatedReaction,
   useAnimatedStyle,
-  useDerivedValue,
   useSharedValue,
   withRepeat,
+  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -42,7 +48,7 @@ export interface TileProps {
   translateX?: SharedValue<number>;
   translateY?: SharedValue<number>;
   scale?: SharedValue<number>;
-  /** Включить wobble-анимацию (вращение ±3deg на repeat), пока активна. */
+  /** Включить wobble: > 0 — качать, 0 — стоп. */
   wobble?: SharedValue<number>;
   style?: StyleProp<ViewStyle>;
 }
@@ -60,24 +66,47 @@ const Tile: React.FC<TileProps> = ({
   const internalTy = useSharedValue(0);
   const internalScale = useSharedValue(1);
   const internalWobble = useSharedValue(0);
+  const rotation = useSharedValue(0);
 
   const tx = translateX ?? internalTx;
   const ty = translateY ?? internalTy;
   const sc = scale ?? internalScale;
   const wb = wobble ?? internalWobble;
 
-  // Wobble: -3..+3 degrees, period ~250ms, активен когда wb.value > 0
-  const wobbleRotation = useDerivedValue(() => {
-    if (wb.value <= 0) return 0;
-    return Math.sin(Date.now() / 80) * 3;
-  });
+  // Реакция на wobble: запускаем/гасим колебания угла без Date.now()
+  useAnimatedReaction(
+    () => wb.value,
+    (current, previous) => {
+      'worklet';
+      if (current > 0 && previous !== current) {
+        rotation.value = withRepeat(
+          withSequence(
+            withTiming(-3, { duration: 140, easing: Easing.inOut(Easing.quad) }),
+            withTiming(3, { duration: 140, easing: Easing.inOut(Easing.quad) }),
+          ),
+          -1,
+          true,
+        );
+      } else if (current === 0) {
+        cancelAnimation(rotation);
+        rotation.value = withTiming(0, { duration: 120 });
+      }
+    },
+    [wb],
+  );
+
+  useEffect(() => {
+    return () => {
+      cancelAnimation(rotation);
+    };
+  }, [rotation]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: tx.value },
       { translateY: ty.value },
       { scale: sc.value },
-      { rotate: `${wobbleRotation.value}deg` },
+      { rotate: `${rotation.value}deg` },
     ],
   }));
 
@@ -113,7 +142,9 @@ const styles = StyleSheet.create({
     fontSize: TILE_FONT_SIZE,
     color: '#1A1A2E',
     fontFamily: getNunitoFamily('800'),
-    lineHeight: TILE_FONT_SIZE,
+    lineHeight: TILE_FONT_SIZE + 2,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });
 

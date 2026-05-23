@@ -124,14 +124,7 @@ const CompareScreen: React.FC = () => {
   const [showFailure, setShowFailure] = useState(false);
 
   const [burstTrigger, setBurstTrigger] = useState(0);
-  const [burstOrigin, setBurstOrigin] = useState<{ x: number; y: number } | null>(
-    null,
-  );
-  const buttonRefs = useRef<Record<CompareLabel, View | null>>({
-    greater: null,
-    less: null,
-    equal: null,
-  });
+  const [burstButton, setBurstButton] = useState<CompareLabel | null>(null);
 
   const shakeRefs = useRef<Record<CompareLabel, ShakeHandle | null>>({
     greater: null,
@@ -147,6 +140,14 @@ const CompareScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Сбрасываем burst при размонтировании, чтобы анимация не дёргалась
+  // во время transition между экранами.
+  useEffect(() => {
+    return () => {
+      setBurstButton(null);
+    };
+  }, []);
+
   // Подсчёт правильных ответов и звуки/анимации
   useEffect(() => {
     if (feedbackKind === 'idle') return;
@@ -154,13 +155,8 @@ const CompareScreen: React.FC = () => {
       correctCountRef.current += 1;
       void soundAdapter.play('success');
       if (selectedAnswer !== null) {
-        const node = buttonRefs.current[selectedAnswer];
-        if (node) {
-          node.measureInWindow((x, y, w, h) => {
-            setBurstOrigin({ x: x + w / 2, y: y + h / 2 });
-            setBurstTrigger((n) => n + 1);
-          });
-        }
+        setBurstButton(selectedAnswer);
+        setBurstTrigger((n) => n + 1);
       }
     } else if (feedbackKind === 'incorrect') {
       void soundAdapter.play('error');
@@ -261,11 +257,7 @@ const CompareScreen: React.FC = () => {
                 shakeRefs.current[label] = r;
               }}
             >
-              <View
-                ref={(r) => {
-                  buttonRefs.current[label] = r;
-                }}
-              >
+              <View>
                 <PressableButton
                   onPress={() => answer(label)}
                   disabled={isLocked}
@@ -284,20 +276,15 @@ const CompareScreen: React.FC = () => {
                   >
                     {LABEL_GLYPH[label]}
                   </Text>
+                  {burstButton === label && (
+                    <YellowBurst trigger={burstTrigger} />
+                  )}
                 </PressableButton>
               </View>
             </ShakeView>
           );
         })}
       </View>
-
-      {burstOrigin !== null && (
-        <YellowBurst
-          trigger={burstTrigger}
-          originX={burstOrigin.x}
-          originY={burstOrigin.y}
-        />
-      )}
 
       {showFailure && (
         <SessionFailure

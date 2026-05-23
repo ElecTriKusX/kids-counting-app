@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/illustrations/mascot.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/illustrations/mascot.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFF8F0"
-    },
     "assetBundlePatterns": ["assets/**/*"],
     "ios": {
       "supportsTablet": true,
@@ -37,6 +32,14 @@
             "./node_modules/@expo-google-fonts/nunito/700Bold/Nunito_700Bold.ttf",
             "./node_modules/@expo-google-fonts/nunito/800ExtraBold/Nunito_800ExtraBold.ttf"
           ]
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/illustrations/mascot.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#FFF8F0"
         }
       ]
     ]

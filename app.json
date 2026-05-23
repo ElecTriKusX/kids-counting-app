@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Kids Counting App",
+    "slug": "kids-counting-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icons/icon-home.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/illustrations/mascot.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF8F0"
+    },
+    "assetBundlePatterns": ["assets/**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icons/icon-home.png",
+        "backgroundColor": "#FFF8F0"
+      }
+    },
+    "web": {
+      "favicon": "./assets/icons/icon-home.png"
+    },
+    "plugins": []
+  }
+}

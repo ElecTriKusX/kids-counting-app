@@ -37,3 +37,12 @@ yarn-error.*
 
 # coverage
 coverage/
+
+# Kiro IDE
+.kiro/
+
+# Android Grandle-build test
+android/
+
+# design files
+*.pen
